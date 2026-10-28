@@ -390,6 +390,9 @@ async function ensureSurvey(code, project, site) {
 
 // ---- Projects ----------------------------------------------------------
 
+/** The Packet Fusion template project (the demo); matches TEMPLATE_PROJECT_CODE in src/api.ts. */
+const TEMPLATE_PROJECT_CODE = 'pfu-demo';
+
 /** Where each welcome button leads once a project is chosen. */
 const NEXT = {
   start: { lead: 'to start surveying', href: code => `#/p/${enc(code)}/sites` },
@@ -405,13 +408,18 @@ async function viewProjects(next, stale) {
     location.replace(to.href(res.data[0].code));
     return;
   }
+  const btn = p => `<a class="sv-big-btn" href="${esc(to.href(p.code))}">${esc(p.name)}</a>`;
+  const template = res.data.filter(p => p.code === TEMPLATE_PROJECT_CODE);
+  const projects = res.data.filter(p => p.code !== TEMPLATE_PROJECT_CODE);
   render(`<div class="sv-page"><div class="sv-body">
     <h1 class="sv-heading">Choose your project</h1>
     <p class="sv-hint" style="margin-bottom:14px">Pick the customer project ${esc(to.lead)}.</p>
     ${cacheNote(res)}
+    ${template.length ? `<div class="sv-section">Template</div>
+    <div class="sv-stack">${template.map(btn).join('')}</div>` : ''}
+    <div class="sv-section">Project List</div>
     <div class="sv-stack">
-      ${res.data.map(p => `<a class="sv-big-btn" href="${esc(to.href(p.code))}">${esc(p.name)}</a>`).join('')
-        || '<div class="sv-empty">No active projects.</div>'}
+      ${projects.map(btn).join('') || '<div class="sv-empty">No active projects.</div>'}
     </div>
     <p style="margin-top:18px"><a class="sv-link" href="#/">‹ Back to welcome</a></p>
   </div></div>`);
