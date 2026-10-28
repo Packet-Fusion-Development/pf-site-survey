@@ -456,13 +456,16 @@ async function removeAccess(env: Env, code: string, id: string) {
 
 // ---- Reads -----------------------------------------------------------------
 
+/** The Packet Fusion template project (the demo), always listed first. */
+const TEMPLATE_PROJECT_CODE = "pfu-demo";
+
 async function listProjects(env: Env) {
   const { results } = await env.DB.prepare(
     `SELECT p.id, p.code, p.name, p.status, p.settings, c.name AS customer_name
        FROM projects p JOIN customers c ON c.id = p.customer_id
       WHERE p.status != 'archived'
-      ORDER BY c.name, p.name`,
-  ).all<Json>();
+      ORDER BY p.code = ? DESC, c.name, p.name`,
+  ).bind(TEMPLATE_PROJECT_CODE).all<Json>();
   return results.map(withSettings);
 }
 
