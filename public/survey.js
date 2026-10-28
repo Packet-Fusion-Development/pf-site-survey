@@ -8,7 +8,10 @@
  * extra fields each category asks for.
  *
  * Screens (hash routes, so the installed app can deep-link and reload):
- *   #/p/<code>                                  welcome
+ *   #/                                          welcome: what the app does; Results, Project setup, Start
+ *   #/projects?next=start|results|setup         choose your project, then go on to that screen
+ *   #/new                                       admin: new project from the blank template
+ *   #/p/<code>                                  project welcome (deep links)
  *   #/p/<code>/sites                            choose your site
  *   #/p/<code>/site/<site>                      site briefing, Get Support, categories
  *   #/p/<code>/site/<site>/maps                 maps: site documents and floor plans
@@ -257,7 +260,9 @@ async function route() {
   closeSheet();
 
   try {
-    if (p[0] !== 'p' || !p[1]) return await viewProjects(stale);
+    if (p[0] === 'projects') return await viewProjects(q.get('next'), stale);
+    if (p[0] === 'new') return await viewNewProject(stale);
+    if (p[0] !== 'p' || !p[1]) return await viewIntro(stale);
     const code = p[1];
     if (p[2] === 'setup') return await viewSetup(code, stale);
     if (p[2] === 'sites') return await viewSites(code, stale);
@@ -387,20 +392,73 @@ async function ensureSurvey(code, project, site) {
 
 // ---- Projects ----------------------------------------------------------
 
-async function viewProjects(stale) {
-  const res = await apiGet('/api/projects');
+/** Where each welcome button leads once a project is chosen. */
+const NEXT = {
+  start: { lead: 'to start surveying', href: code => `#/p/${enc(code)}/sites` },
+  results: { lead: 'to view its results', href: code => `/results/${enc(code)}` },
+  setup: { lead: 'to set it up', href: code => `#/p/${enc(code)}/setup` },
+};
+
+async function viewProjects(next, stale) {
+  const to = NEXT[next] || NEXT.start;
+  const [res, me] = await Promise.all([apiGet('/api/projects'), getMe()]);
   if (stale()) return;
-  if (res.data.length === 1) {
-    location.replace(`#/p/${enc(res.data[0].code)}`);
+  // Setup always stops here, so an admin can reach "New project".
+  const canCreate = to === NEXT.setup && me.is_admin;
+  if (res.data.length === 1 && !canCreate) {
+    location.replace(to.href(res.data[0].code));
     return;
   }
   render(`<div class="sv-page"><div class="sv-body">
     <h1 class="sv-heading">Choose your project</h1>
+    <p class="sv-hint" style="margin-bottom:14px">Pick the customer project ${esc(to.lead)}${canCreate ? ', or start a new one' : ''}.</p>
     ${cacheNote(res)}
+    ${canCreate ? '<a class="sv-btn is-secondary" href="#/new" id="newProjectBtn" style="margin-bottom:14px">+ New project</a>' : ''}
     <div class="sv-stack">
-      ${res.data.map(p => `<a class="sv-big-btn" href="#/p/${enc(p.code)}">${esc(p.name)}</a>`).join('')
+      ${res.data.map(p => `<a class="sv-big-btn" href="${esc(to.href(p.code))}">${esc(p.name)}</a>`).join('')
         || '<div class="sv-empty">No active projects.</div>'}
-    </div></div></div>`);
+    </div>
+    <p style="margin-top:18px"><a class="sv-link" href="#/">‹ Back to welcome</a></p>
+  </div></div>`);
+}
+
+// ---- Welcome (first screen) ----------------------------------------------
+
+async function viewIntro(stale) {
+  const me = await getMe();
+  if (stale()) return;
+
+  render(`<div class="sv-page"><div class="sv-body">
+    <h1 class="sv-welcome-title">${esc(APP_TITLE)}</h1>
+    <div class="sv-welcome-body">
+      <p>Welcome. This app guides you through surveying every device at a customer's sites: confirm what's on their list, mark where each one is on the floor plan, and flag anything that doesn't match. Everything you enter goes straight to the central database, so results update as you work.</p>
+      <h2>Getting started</h2>
+      <ol>
+        <li>Tap Start and choose your project.</li>
+        <li>Choose your site and review its briefing: your site contact, parking, access hours, WiFi, and maps.</li>
+        <li>Choose what you're surveying.</li>
+      </ol>
+      <h2>At each location</h2>
+      <ol start="4">
+        <li>Search by the name, extension, or number shown on the device.</li>
+        <li>Mark the location on your building floor plan.</li>
+        <li>Complete the required fields, then save. Completed items drop off your list.</li>
+        <li>Test each device where you can, and record whether it's working.</li>
+        <li>Add a photo only if something is unusual (damaged, hidden, or not where expected).</li>
+        <li>If something doesn't match the list, use the discrepancy flag.</li>
+      </ol>
+      <h2>Results and setup</h2>
+      <p><strong>Results</strong> shows live totals by site, building, and floor, floor plans with status pins, and anything flagged for attention, with a CSV download. <strong>Project setup</strong> is where an administrator imports the device list, sets the categories and site briefings, and gives the customer access to their results.</p>
+      <p>No signal? Keep going. Your entries are saved on this device and sync automatically when you're back online.</p>
+    </div>
+    <div class="sv-welcome-foot">
+      <span class="sv-actions" style="gap:16px">
+        ${me.internal !== false ? '<a class="sv-link" href="#/projects?next=results">Results</a>' : ''}
+        ${me.is_admin ? '<a class="sv-link" href="#/projects?next=setup">Project setup</a>' : ''}
+      </span>
+      <a class="sv-big-btn" href="#/projects?next=start" id="startBtn">Start</a>
+    </div>
+  </div></div>`);
 }
 
 // ---- Welcome -----------------------------------------------------------
@@ -463,7 +521,7 @@ async function viewSites(code, stale) {
           ${esc(s.name)}${s.item_count ? `<span class="sv-count">${s.done_count}/${s.item_count}</span>` : ''}
         </a>`).join('') || `<div class="sv-empty">No ${esc(c.siteN.toLowerCase())} set up for this project yet.</div>`}
     </div>
-    <p style="margin-top:18px"><a class="sv-link" href="#/p/${enc(code)}">‹ Back to welcome</a></p>
+    <p style="margin-top:18px"><a class="sv-link" href="#/">‹ Back to welcome</a></p>
   </div></div>`);
 
   document.getElementById('siteSearch')?.addEventListener('input', e => {
@@ -1390,6 +1448,81 @@ function textToFields(text, existing) {
   });
 }
 
+/** Project codes go in links (/results/<code>), so keep them short and plain. */
+const projectCode = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
+/** Campus → Campuses, Facility → Facilities, Site → Sites. */
+const plural = s => (/[^aeiou]y$/i.test(s) ? `${s.slice(0, -1)}ies` : /(s|x|z|ch|sh)$/i.test(s) ? `${s}es` : `${s}s`);
+
+async function viewNewProject(stale) {
+  const me = await getMe();
+  if (stale()) return;
+  if (!me.is_admin) throw new Error('Only project administrators can create projects.');
+
+  render(`<div class="sv-page">
+    ${appBar({ title: 'New project', lead: { icon: 'back', label: 'Back', href: '#/projects?next=setup', ring: true } })}
+    <div class="sv-body">
+    <form class="sv-form" id="newProjectForm">
+      <div class="sv-section">Customer and project</div>
+      <div class="sv-form-2col">
+        <label class="sv-field"><span class="lbl">Customer name *</span><input name="customer_name" maxlength="120" required placeholder="City of Springfield"></label>
+        <label class="sv-field"><span class="lbl">Project name *</span><input name="name" maxlength="120" required placeholder="Phone system survey"></label>
+      </div>
+      <label class="sv-field"><span class="lbl">Project code (used in links such as /results/<i>code</i>)</span><input name="code" maxlength="40" required pattern="[a-z0-9][a-z0-9\\-]{1,39}" placeholder="city-of-springfield" autocapitalize="none"></label>
+
+      <div class="sv-section">Template</div>
+      <div class="sv-inline-form">
+        <strong>Packet Fusion Site Survey</strong>
+        <p class="sv-hint">The standard setup every new project starts from. Change any of it in Project setup afterwards.</p>
+        <ul class="sv-hint" style="margin:6px 0 0;padding-left:20px;line-height:1.7">
+          <li>Categories: User List (items called Phones), Analog Stations, POTS Survey, Emergency Phones</li>
+          <li>User List asks for Cable drop status: Present / Not Present</li>
+          <li>Support button: Contact Packet Fusion Support (add the numbers in setup)</li>
+        </ul>
+      </div>
+
+      <div class="sv-section">Locations</div>
+      <div class="sv-form-2col">
+        <label class="sv-field"><span class="lbl">A location is called</span><input name="site_singular" maxlength="40" value="Site" placeholder="Campus, Facility, Office…"></label>
+        <label class="sv-field"><span class="lbl">…and in plural</span><input name="site_plural" maxlength="40" value="Sites"></label>
+      </div>
+      <label class="sv-field"><span class="lbl">Sites, one per line (optional; buildings and floors come from the device list import)</span>
+        <textarea name="sites" rows="5" placeholder="Site 1 - City Hall&#10;Site 2 - Public Works Yard"></textarea></label>
+
+      <button class="sv-btn" type="submit">Create project</button>
+      <div id="newProjectMsg" hidden></div>
+    </form>
+    </div>
+  </div>`);
+
+  const form = document.getElementById('newProjectForm');
+  const f = form.elements;
+  // The code follows the customer name until someone edits it by hand.
+  let codeTouched = false;
+  f.code.addEventListener('input', () => { codeTouched = true; });
+  f.customer_name.addEventListener('input', () => { if (!codeTouched) f.code.value = projectCode(f.customer_name.value); });
+  f.site_singular.addEventListener('input', () => { f.site_plural.value = f.site_singular.value.trim() ? plural(f.site_singular.value.trim()) : ''; });
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const out = document.getElementById('newProjectMsg');
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      const project = await apiDirect('POST', '/api/projects', JSON.stringify({
+        customer_name: f.customer_name.value, name: f.name.value, code: f.code.value,
+        site_singular: f.site_singular.value, site_plural: f.site_plural.value,
+        sites: f.sites.value.split('\n'),
+      }), 'application/json');
+      location.hash = `#/p/${enc(project.code)}/setup`;
+    } catch (err) {
+      out.className = 'sv-error';
+      out.textContent = err.message;
+      out.hidden = false;
+      btn.disabled = false;
+    }
+  });
+}
+
 async function viewSetup(code, stale) {
   const [res, me] = await Promise.all([loadProject(code), getMe()]);
   if (stale()) return;
@@ -1409,7 +1542,7 @@ async function viewSetup(code, stale) {
   </div>`;
 
   render(`<div class="sv-page">
-    ${appBar({ title: 'Project setup', lead: { icon: 'back', label: 'Back', href: `#/p/${enc(code)}`, ring: true } })}
+    ${appBar({ title: 'Project setup', lead: { icon: 'back', label: 'Back', href: '#/', ring: true } })}
     <div class="sv-body">
     <p class="sv-hint" style="margin-bottom:12px">${esc(project.customer_name)} · ${esc(project.name)}</p>
 

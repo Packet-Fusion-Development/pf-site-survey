@@ -101,6 +101,10 @@ export async function handleApi(request: Request, env: Env, user: string | null)
     }
 
     if (method === "GET" && a === "projects" && !b) return json(await listProjects(env));
+    if (method === "POST" && a === "projects" && !b) {
+      requireAdmin();
+      return json(await createProject(env, await body(request)), 201);
+    }
     if (method === "GET" && a === "projects" && b && !c) return json(await projectOverview(env, b));
     if (method === "GET" && a === "projects" && b && c === "tree") return json(await projectTree(env, b));
     if (method === "GET" && a === "projects" && b && c === "surveys") return json(await listSurveys(env, b));
@@ -671,6 +675,62 @@ async function putSettings(env: Env, code: string, input: Json) {
   await env.DB.prepare(`UPDATE projects SET settings = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`)
     .bind(JSON.stringify(next), project.id).run();
   return withSettings({ ...project, settings: JSON.stringify(next) });
+}
+
+/**
+ * The "Packet Fusion Site Survey" template every new project starts from. Its
+ * outline is the pfu-demo project: the four categories from the field
+ * mockups, CableDropStatus on the user list, and Packet Fusion Support, with
+ * none of that customer's sites, lists, plans or contact numbers.
+ */
+const BLANK_TEMPLATE = {
+  subject: "voice equipment",
+  categories: [
+    {
+      key: "phone", label: "User List", title: "Phones",
+      fields: [{ key: "cable_drop_status", label: "Cable drop status", type: "select", options: ["Present", "Not Present"], required: false }],
+    },
+    { key: "analog", label: "Analog Stations", title: "Analog Stations", fields: [] },
+    { key: "pots", label: "POTS Survey", title: "POTS Lines", fields: [] },
+    { key: "emergency", label: "Emergency Phones", title: "Emergency Phones", fields: [] },
+  ],
+  support: { label: "Packet Fusion Support", phone: null, sms: null, email: null },
+};
+
+const PROJECT_CODE_RE = /^[a-z0-9][a-z0-9-]{1,39}$/;
+
+/** New project from the blank template, under a new or existing customer, with optional sites. */
+async function createProject(env: Env, input: Json) {
+  const customerName = reqStr(input, "customer_name", 120);
+  const name = reqStr(input, "name", 120);
+  const code = (optStr(input, "code", 40) || customerName).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!PROJECT_CODE_RE.test(code)) throw new HttpError(400, "The project code must be 2–40 letters, numbers or dashes.");
+  if (await env.DB.prepare(`SELECT 1 FROM projects WHERE code = ?`).bind(code).first()) {
+    throw new HttpError(409, `A project with the code "${code}" already exists. Choose another code.`);
+  }
+
+  const singular = optStr(input, "site_singular", 40) || "Site";
+  const plural = optStr(input, "site_plural", 40)
+    || (/[^aeiou]y$/i.test(singular) ? `${singular.slice(0, -1)}ies` : /(s|x|z|ch|sh)$/i.test(singular) ? `${singular}es` : `${singular}s`);
+  const siteNames = [...new Set((Array.isArray(input.sites) ? input.sites : [])
+    .map(s => (typeof s === "string" ? s.trim() : ""))
+    .filter(Boolean))];
+  if (siteNames.length > 200) throw new HttpError(400, "Add at most 200 sites at a time.");
+  if (siteNames.some(s => s.length > 120)) throw new HttpError(400, "Site names must be 120 characters or fewer.");
+
+  const settings = { ...structuredClone(BLANK_TEMPLATE), site_label: { singular, plural } };
+  const existing = await env.DB.prepare(`SELECT id FROM customers WHERE lower(name) = lower(?)`).bind(customerName).first<{ id: string }>();
+  const customerId = existing?.id ?? crypto.randomUUID();
+  const projectId = crypto.randomUUID();
+
+  await env.DB.batch([
+    ...(existing ? [] : [env.DB.prepare(`INSERT INTO customers (id, name) VALUES (?, ?)`).bind(customerId, customerName)]),
+    env.DB.prepare(`INSERT INTO projects (id, customer_id, code, name, status, settings) VALUES (?, ?, ?, ?, 'active', ?)`)
+      .bind(projectId, customerId, code, name, JSON.stringify(settings)),
+    ...siteNames.map((siteName, i) => env.DB.prepare(`INSERT INTO sites (id, project_id, code, name) VALUES (?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), projectId, `S${i + 1}`, siteName)),
+  ]);
+  return projectByCode(env, code);
 }
 
 async function putBriefing(env: Env, siteId: string, input: Json) {
