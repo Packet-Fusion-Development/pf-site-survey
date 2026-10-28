@@ -24,7 +24,7 @@ Facility, Office), lists its survey categories, and sets its support contacts.
 | Project | Code | What it is |
 |---|---|---|
 | LACCD District Technology Survey | `laccd-dts` | 10 LACCD campuses, 719 real floor plans. See [LACCD project](#laccd-project). |
-| Packet Fusion Site Survey | `pfu-demo` | Fictitious campus for demos and testers, and the outline of the new-project template. See [Demo project](#demo-project-packet-fusion-site-survey). |
+| Packet Fusion - Site Survey Template | `pfu-demo` | Fictitious campus for demos and testers, and the outline of the new-project template. See [Demo project](#demo-project-packet-fusion-site-survey). |
 
 New projects are created from **Project setup → + New project**, starting from
 the Packet Fusion Site Survey template, then configured in the app's **Project

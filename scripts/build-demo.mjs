@@ -229,7 +229,7 @@ function buildPdf(content) {
 const customerId = stableId("customer");
 const projectId = stableId("project");
 insert("customers", { id: customerId, name: "Packet Fusion (demo)" });
-insert("projects", { id: projectId, customer_id: customerId, code: PROJECT_CODE, name: "Packet Fusion Site Survey" });
+insert("projects", { id: projectId, customer_id: customerId, code: PROJECT_CODE, name: "Packet Fusion - Site Survey Template" });
 out.push(`UPDATE projects SET settings = ${sql(JSON.stringify(SETTINGS))} WHERE id = ${sql(projectId)};`);
 
 const surveyId = stableId("survey:site1:demo-engineer");
