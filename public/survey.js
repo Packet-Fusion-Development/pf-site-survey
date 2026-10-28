@@ -8,7 +8,9 @@
  * extra fields each category asks for.
  *
  * Screens (hash routes, so the installed app can deep-link and reload):
- *   #/p/<code>                                  welcome
+ *   #/                                          welcome: what the app does; Results, Project setup, Start
+ *   #/projects?next=start|results|setup         choose your project, then go on to that screen
+ *   #/p/<code>                                  project welcome (deep links)
  *   #/p/<code>/sites                            choose your site
  *   #/p/<code>/site/<site>                      site briefing, Get Support, categories
  *   #/p/<code>/site/<site>/maps                 maps: site documents and floor plans
@@ -257,7 +259,8 @@ async function route() {
   closeSheet();
 
   try {
-    if (p[0] !== 'p' || !p[1]) return await viewProjects(stale);
+    if (p[0] === 'projects') return await viewProjects(q.get('next'), stale);
+    if (p[0] !== 'p' || !p[1]) return await viewIntro(stale);
     const code = p[1];
     if (p[2] === 'setup') return await viewSetup(code, stale);
     if (p[2] === 'sites') return await viewSites(code, stale);
@@ -387,20 +390,78 @@ async function ensureSurvey(code, project, site) {
 
 // ---- Projects ----------------------------------------------------------
 
-async function viewProjects(stale) {
+/** The Packet Fusion template project (the demo); matches TEMPLATE_PROJECT_CODE in src/api.ts. */
+const TEMPLATE_PROJECT_CODE = 'pfu-demo';
+
+/** Where each welcome button leads once a project is chosen. */
+const NEXT = {
+  start: { lead: 'to start surveying', href: code => `#/p/${enc(code)}/sites` },
+  results: { lead: 'to view its results', href: code => `/results/${enc(code)}` },
+  setup: { lead: 'to set it up', href: code => `#/p/${enc(code)}/setup` },
+};
+
+async function viewProjects(next, stale) {
+  const to = NEXT[next] || NEXT.start;
   const res = await apiGet('/api/projects');
   if (stale()) return;
   if (res.data.length === 1) {
-    location.replace(`#/p/${enc(res.data[0].code)}`);
+    location.replace(to.href(res.data[0].code));
     return;
   }
+  const btn = p => `<a class="sv-big-btn" href="${esc(to.href(p.code))}">${esc(p.name)}</a>`;
+  const template = res.data.filter(p => p.code === TEMPLATE_PROJECT_CODE);
+  const projects = res.data.filter(p => p.code !== TEMPLATE_PROJECT_CODE);
   render(`<div class="sv-page"><div class="sv-body">
     <h1 class="sv-heading">Choose your project</h1>
+    <p class="sv-hint" style="margin-bottom:14px">Pick the customer project ${esc(to.lead)}.</p>
     ${cacheNote(res)}
+    ${template.length ? `<div class="sv-section">Template</div>
+    <div class="sv-stack">${template.map(btn).join('')}</div>` : ''}
+    <div class="sv-section">Project List</div>
     <div class="sv-stack">
-      ${res.data.map(p => `<a class="sv-big-btn" href="#/p/${enc(p.code)}">${esc(p.name)}</a>`).join('')
-        || '<div class="sv-empty">No active projects.</div>'}
-    </div></div></div>`);
+      ${projects.map(btn).join('') || '<div class="sv-empty">No active projects.</div>'}
+    </div>
+    <p style="margin-top:18px"><a class="sv-link" href="#/">‹ Back to welcome</a></p>
+  </div></div>`);
+}
+
+// ---- Welcome (first screen) ----------------------------------------------
+
+async function viewIntro(stale) {
+  const me = await getMe();
+  if (stale()) return;
+
+  render(`<div class="sv-page"><div class="sv-body">
+    <h1 class="sv-welcome-title">${esc(APP_TITLE)}</h1>
+    <div class="sv-welcome-body">
+      <p>Welcome. This app guides you through surveying every device at a customer's sites: confirm what's on their list, mark where each one is on the floor plan, and flag anything that doesn't match. Everything you enter goes straight to the central database, so results update as you work.</p>
+      <h2>Getting started</h2>
+      <ol>
+        <li>Tap Start and choose your project.</li>
+        <li>Choose your site and review its briefing: your site contact, parking, access hours, WiFi, and maps.</li>
+        <li>Choose what you're surveying.</li>
+      </ol>
+      <h2>At each location</h2>
+      <ol start="4">
+        <li>Search by the name, extension, or number shown on the device.</li>
+        <li>Mark the location on your building floor plan.</li>
+        <li>Complete the required fields, then save. Completed items drop off your list.</li>
+        <li>Test each device where you can, and record whether it's working.</li>
+        <li>Add a photo only if something is unusual (damaged, hidden, or not where expected).</li>
+        <li>If something doesn't match the list, use the discrepancy flag.</li>
+      </ol>
+      <h2>Results and setup</h2>
+      <p><strong>Results</strong> shows live totals by site, building, and floor, floor plans with status pins, and anything flagged for attention, with a CSV download. <strong>Project setup</strong> is where an administrator imports the device list, sets the categories and site briefings, and gives the customer access to their results.</p>
+      <p>No signal? Keep going. Your entries are saved on this device and sync automatically when you're back online.</p>
+    </div>
+    <div class="sv-welcome-foot">
+      <span class="sv-actions" style="gap:16px">
+        ${me.internal !== false ? '<a class="sv-link" href="#/projects?next=results">Results</a>' : ''}
+        ${me.is_admin ? '<a class="sv-link" href="#/projects?next=setup">Project setup</a>' : ''}
+      </span>
+      <a class="sv-big-btn" href="#/projects?next=start" id="startBtn">Start</a>
+    </div>
+  </div></div>`);
 }
 
 // ---- Welcome -----------------------------------------------------------
@@ -463,7 +524,7 @@ async function viewSites(code, stale) {
           ${esc(s.name)}${s.item_count ? `<span class="sv-count">${s.done_count}/${s.item_count}</span>` : ''}
         </a>`).join('') || `<div class="sv-empty">No ${esc(c.siteN.toLowerCase())} set up for this project yet.</div>`}
     </div>
-    <p style="margin-top:18px"><a class="sv-link" href="#/p/${enc(code)}">‹ Back to welcome</a></p>
+    <p style="margin-top:18px"><a class="sv-link" href="#/">‹ Back to welcome</a></p>
   </div></div>`);
 
   document.getElementById('siteSearch')?.addEventListener('input', e => {
@@ -1409,7 +1470,7 @@ async function viewSetup(code, stale) {
   </div>`;
 
   render(`<div class="sv-page">
-    ${appBar({ title: 'Project setup', lead: { icon: 'back', label: 'Back', href: `#/p/${enc(code)}`, ring: true } })}
+    ${appBar({ title: 'Project setup', lead: { icon: 'back', label: 'Back', href: '#/', ring: true } })}
     <div class="sv-body">
     <p class="sv-hint" style="margin-bottom:12px">${esc(project.customer_name)} · ${esc(project.name)}</p>
 
