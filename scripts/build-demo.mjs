@@ -1,6 +1,8 @@
 /**
- * Builds the "Packet Fusion University" demo project: a fictitious campus
- * for showing the field app to peers without exposing any customer data.
+ * Builds the "Packet Fusion Site Survey" demo project (code pfu-demo): a
+ * fictitious campus for showing the field app to peers without exposing any
+ * customer data. Its settings are also the outline of the Blank project
+ * template (BLANK_TEMPLATE in src/api.ts).
  *
  *   5 sites  — sites 1–3 have 2 buildings × 3 floors, sites 4–5 have
  *              5 buildings × 2 floors (38 floors in all)
@@ -226,8 +228,8 @@ function buildPdf(content) {
 
 const customerId = stableId("customer");
 const projectId = stableId("project");
-insert("customers", { id: customerId, name: "Packet Fusion University (demo)" });
-insert("projects", { id: projectId, customer_id: customerId, code: PROJECT_CODE, name: "Packet Fusion University - Demo Survey" });
+insert("customers", { id: customerId, name: "Packet Fusion (demo)" });
+insert("projects", { id: projectId, customer_id: customerId, code: PROJECT_CODE, name: "Packet Fusion - Site Survey Template" });
 out.push(`UPDATE projects SET settings = ${sql(JSON.stringify(SETTINGS))} WHERE id = ${sql(projectId)};`);
 
 const surveyId = stableId("survey:site1:demo-engineer");

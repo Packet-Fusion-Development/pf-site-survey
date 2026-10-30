@@ -14,7 +14,7 @@
  * Bump VERSION whenever SHELL changes so installed apps pick up the update.
  */
 
-const VERSION = 'pfss-v7';
+const VERSION = 'pfss-v8';
 const SHELL_CACHE = `${VERSION}-shell`;
 const PLANS_CACHE = 'pfss-plans';
 const PHOTOS_CACHE = 'pfss-photos';

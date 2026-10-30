@@ -24,9 +24,11 @@ Facility, Office), lists its survey categories, and sets its support contacts.
 | Project | Code | What it is |
 |---|---|---|
 | LACCD District Technology Survey | `laccd-dts` | 10 LACCD campuses, 719 real floor plans. See [LACCD project](#laccd-project). |
-| Packet Fusion University – Demo Survey | `pfu-demo` | Fictitious campus for demos and testers. See [Demo project](#demo-project-packet-fusion-university). |
+| Packet Fusion - Site Survey Template | `pfu-demo` | Fictitious campus for demos and testers, and the outline of the new-project template. See [Demo project](#demo-project-packet-fusion-site-survey). |
 
-New projects are set up in the app's **Project setup** screen. Device lists come
+New projects are created from **Project setup → + New project**, starting from
+the Packet Fusion Site Survey template, then configured in the app's **Project
+setup** screen. Device lists come
 from a CSV or Excel import, and floor plans are stored in R2 under
 `<project_code>/plans/…`.
 
@@ -57,7 +59,7 @@ public/
   laccd/                 LACCD floor-plan library page (served at /laccd/)
   thumbs/<CAMPUS>/       LACCD plan thumbnails
 scripts/
-  build-demo.mjs         Generates the Packet Fusion University demo
+  build-demo.mjs         Generates the Packet Fusion Site Survey demo (pfu-demo)
   test-access.mjs        Tests for the Access JWT gate (npm test)
   laccd/                 LACCD project scripts (catalog build, seed, drawing upload/verify)
 data/
@@ -214,10 +216,12 @@ reads LACCD's drawings from `laccd-floorplans`. The hostname is a public
 hostname on the shared Packet Fusion Access application, whose
 "Packet Fusion Entra SSO" policy admits any `@packetfusion.com` account.
 
-## Demo project: Packet Fusion University
+## Demo project: Packet Fusion Site Survey
 
-A fictitious campus for showing the app without customer data, built by
-[scripts/build-demo.mjs](scripts/build-demo.mjs):
+A fictitious campus (code `pfu-demo`) for showing the app without customer
+data, built by [scripts/build-demo.mjs](scripts/build-demo.mjs). Its settings
+are the outline of the template new projects start from (`BLANK_TEMPLATE` in
+[src/api.ts](src/api.ts)).
 
 - 5 sites. Sites 1–3 have 2 buildings × 3 floors; sites 4–5 have
   5 buildings × 2 floors.

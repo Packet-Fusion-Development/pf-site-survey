@@ -10,6 +10,7 @@
  * Screens (hash routes, so the installed app can deep-link and reload):
  *   #/                                          welcome: what the app does; Results, Project setup, Start
  *   #/projects?next=start|results|setup         choose your project, then go on to that screen
+ *   #/new                                       admin: new project from the Packet Fusion template
  *   #/p/<code>                                  project welcome (deep links)
  *   #/p/<code>/sites                            choose your site
  *   #/p/<code>/site/<site>                      site briefing, Get Support, categories
@@ -260,6 +261,7 @@ async function route() {
 
   try {
     if (p[0] === 'projects') return await viewProjects(q.get('next'), stale);
+    if (p[0] === 'new') return await viewNewProject(stale);
     if (p[0] !== 'p' || !p[1]) return await viewIntro(stale);
     const code = p[1];
     if (p[2] === 'setup') return await viewSetup(code, stale);
@@ -402,9 +404,11 @@ const NEXT = {
 
 async function viewProjects(next, stale) {
   const to = NEXT[next] || NEXT.start;
-  const res = await apiGet('/api/projects');
+  const [res, me] = await Promise.all([apiGet('/api/projects'), getMe()]);
   if (stale()) return;
-  if (res.data.length === 1) {
+  // Setup always stops here, so an admin can reach "New project".
+  const canCreate = to === NEXT.setup && me.is_admin;
+  if (res.data.length === 1 && !canCreate) {
     location.replace(to.href(res.data[0].code));
     return;
   }
@@ -413,8 +417,9 @@ async function viewProjects(next, stale) {
   const projects = res.data.filter(p => p.code !== TEMPLATE_PROJECT_CODE);
   render(`<div class="sv-page"><div class="sv-body">
     <h1 class="sv-heading">Choose your project</h1>
-    <p class="sv-hint" style="margin-bottom:14px">Pick the customer project ${esc(to.lead)}.</p>
+    <p class="sv-hint" style="margin-bottom:14px">Pick the customer project ${esc(to.lead)}${canCreate ? ', or start a new one' : ''}.</p>
     ${cacheNote(res)}
+    ${canCreate ? '<a class="sv-btn is-secondary" href="#/new" id="newProjectBtn" style="margin-bottom:14px">+ New project</a>' : ''}
     ${template.length ? `<div class="sv-section">Template</div>
     <div class="sv-stack">${template.map(btn).join('')}</div>` : ''}
     <div class="sv-section">Project List</div>
@@ -1448,6 +1453,81 @@ function textToFields(text, existing) {
       key: prior?.key, label: lbl.trim(), required,
       options: opts ? opts.split(',').map(o => o.trim()).filter(Boolean) : [],
     };
+  });
+}
+
+/** Project codes go in links (/results/<code>), so keep them short and plain. */
+const projectCode = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
+/** Campus → Campuses, Facility → Facilities, Site → Sites. */
+const plural = s => (/[^aeiou]y$/i.test(s) ? `${s.slice(0, -1)}ies` : /(s|x|z|ch|sh)$/i.test(s) ? `${s}es` : `${s}s`);
+
+async function viewNewProject(stale) {
+  const me = await getMe();
+  if (stale()) return;
+  if (!me.is_admin) throw new Error('Only project administrators can create projects.');
+
+  render(`<div class="sv-page">
+    ${appBar({ title: 'New project', lead: { icon: 'back', label: 'Back', href: '#/projects?next=setup', ring: true } })}
+    <div class="sv-body">
+    <form class="sv-form" id="newProjectForm">
+      <div class="sv-section">Customer and project</div>
+      <div class="sv-form-2col">
+        <label class="sv-field"><span class="lbl">Customer name *</span><input name="customer_name" maxlength="120" required placeholder="City of Springfield"></label>
+        <label class="sv-field"><span class="lbl">Project name *</span><input name="name" maxlength="120" required placeholder="Phone system survey"></label>
+      </div>
+      <label class="sv-field"><span class="lbl">Project code (used in links such as /results/<i>code</i>)</span><input name="code" maxlength="40" required pattern="[a-z0-9][a-z0-9\\-]{1,39}" placeholder="city-of-springfield" autocapitalize="none"></label>
+
+      <div class="sv-section">Template</div>
+      <div class="sv-inline-form">
+        <strong>Packet Fusion - Site Survey Template</strong>
+        <p class="sv-hint">The standard setup every new project starts from. Change any of it in Project setup afterwards.</p>
+        <ul class="sv-hint" style="margin:6px 0 0;padding-left:20px;line-height:1.7">
+          <li>Categories: User List (items called Phones), Analog Stations, POTS Survey, Emergency Phones</li>
+          <li>User List asks for Cable drop status: Present / Not Present</li>
+          <li>Support button: Contact Packet Fusion Support (add the numbers in setup)</li>
+        </ul>
+      </div>
+
+      <div class="sv-section">Locations</div>
+      <div class="sv-form-2col">
+        <label class="sv-field"><span class="lbl">A location is called</span><input name="site_singular" maxlength="40" value="Site" placeholder="Campus, Facility, Office…"></label>
+        <label class="sv-field"><span class="lbl">…and in plural</span><input name="site_plural" maxlength="40" value="Sites"></label>
+      </div>
+      <label class="sv-field"><span class="lbl">Sites, one per line (optional; buildings and floors come from the device list import)</span>
+        <textarea name="sites" rows="5" placeholder="Site 1 - City Hall&#10;Site 2 - Public Works Yard"></textarea></label>
+
+      <button class="sv-btn" type="submit">Create project</button>
+      <div id="newProjectMsg" hidden></div>
+    </form>
+    </div>
+  </div>`);
+
+  const form = document.getElementById('newProjectForm');
+  const f = form.elements;
+  // The code follows the customer name until someone edits it by hand.
+  let codeTouched = false;
+  f.code.addEventListener('input', () => { codeTouched = true; });
+  f.customer_name.addEventListener('input', () => { if (!codeTouched) f.code.value = projectCode(f.customer_name.value); });
+  f.site_singular.addEventListener('input', () => { f.site_plural.value = f.site_singular.value.trim() ? plural(f.site_singular.value.trim()) : ''; });
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const out = document.getElementById('newProjectMsg');
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      const project = await apiDirect('POST', '/api/projects', JSON.stringify({
+        customer_name: f.customer_name.value, name: f.name.value, code: f.code.value,
+        site_singular: f.site_singular.value, site_plural: f.site_plural.value,
+        sites: f.sites.value.split('\n'),
+      }), 'application/json');
+      location.hash = `#/p/${enc(project.code)}/setup`;
+    } catch (err) {
+      out.className = 'sv-error';
+      out.textContent = err.message;
+      out.hidden = false;
+      btn.disabled = false;
+    }
   });
 }
 
