@@ -181,6 +181,10 @@ function siteShort(site) {
 // ---- Project settings & branding ---------------------------------------
 
 const APP_TITLE = 'Packet Fusion Site Survey';
+// Job aid: installing the app on an iPhone Home Screen. PDF export of the
+// Claude Doc at https://claude.ai/artifact/PdBS4t3h7htKnUiZk1xJSU.
+const INSTALL_GUIDE_URL = '/guides/iphone-home-screen.pdf';
+const installGuideLink = `<p><a class="sv-link" href="${INSTALL_GUIDE_URL}" target="_blank" rel="noopener">How to add Site Survey to your iPhone Home Screen</a></p>`;
 
 function cfg(project) {
   const s = project?.settings ?? {};
@@ -440,6 +444,7 @@ async function viewIntro(stale) {
     <h1 class="sv-welcome-title">${esc(APP_TITLE)}</h1>
     <div class="sv-welcome-body">
       <p>Welcome. This app guides you through surveying every device at a customer's sites: confirm what's on their list, mark where each one is on the floor plan, and flag anything that doesn't match. Everything you enter goes straight to the central database, so results update as you work.</p>
+      ${installGuideLink}
       <h2>Getting started</h2>
       <ol>
         <li>Tap Start and choose your project.</li>
@@ -483,6 +488,7 @@ async function viewWelcome(code, stale) {
     ${cacheNote(res)}
     <div class="sv-welcome-body">
       <p>Welcome. ${esc(c.intro || `This app guides you through surveying ${c.subject} at your assigned ${site}.`)}</p>
+      ${installGuideLink}
       <h2>Getting started</h2>
       <ol>
         <li>Tap Start and choose your ${esc(site)}.</li>
